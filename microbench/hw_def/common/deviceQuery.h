@@ -3,6 +3,10 @@
 
 #include <cuda_runtime.h>
 
+/*
+ * 简而言之，该头文件定义了各种 device 的参数数据
+ * 并根据实际机器的属性，对各“常量”进行了赋值
+*/
 unsigned SM_NUMBER;           // number of SMs
 unsigned WARP_SIZE;           // max threads per warp
 unsigned MAX_THREADS_PER_SM;  // max threads / sm
@@ -29,10 +33,14 @@ unsigned THREADS_PER_SM;
 unsigned BLOCKS_NUM;
 unsigned TOTAL_THREADS;
 
+// cudaDeviceProp 是一个结构体，其中定义了
+// 支持CUDA版本号、内存大小、最大thread数目、执行单元的频率等基本信息
 cudaDeviceProp deviceProp;
 
 unsigned intilizeDeviceProp(unsigned deviceID) {
   cudaSetDevice(deviceID);
+  // 该函数对应 cudaDeviceProp 结构体
+  // 传入 deviceID，对 deviceProp 内部各成员进行赋值
   cudaGetDeviceProperties(&deviceProp, deviceID);
 
   // core stats

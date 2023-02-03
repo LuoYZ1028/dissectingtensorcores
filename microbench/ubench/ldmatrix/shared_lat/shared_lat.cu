@@ -47,6 +47,7 @@ __global__ void shared_lat(uint32_t *startClk, uint32_t *stopClk,
 
   extern __shared__ int smem[]; // dynamic 
 
+  // s 是指向 shared memory 这个动态数组的一个指针
   shared_m *s = (shared_m*)&smem[0];
 
   int s_smem = SHARED_MEM_SIZE/sizeof(shared_m);
@@ -130,6 +131,7 @@ void bank_conflict_test(int n, int THREADS_NUM){
   gpuErrchk(
       cudaMemcpy(dsink, dsink_g, sizeof(shared_m), cudaMemcpyDeviceToHost));
 
+  // lat -> latency
   float lat = (float)(stopClk[0] - startClk[0]) / ITERS;
   
   //printf("Shared Memory Latency  = %f cycles\n", lat);

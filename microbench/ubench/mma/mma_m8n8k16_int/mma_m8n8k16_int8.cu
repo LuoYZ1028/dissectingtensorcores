@@ -57,7 +57,7 @@ __global__ void mma_ubench(uint64_t *startClk, uint64_t *stopClk, int *a, int *b
   uint32_t const *A = reinterpret_cast<uint32_t const *>(&frag_A[0]);
   uint32_t const *B = reinterpret_cast<uint32_t const *>(&frag_B[0]);
   int *C = reinterpret_cast<int *>(&frag_D[0]);
-  int *D = C;  // D = A*B + D. 
+  int *D = C;  // D = A*B + C，故将 *C 和 *D 指向同一个地址
 
 
 
@@ -79,6 +79,8 @@ __global__ void mma_ubench(uint64_t *startClk, uint64_t *stopClk, int *a, int *b
   asm volatile("mov.u64 %0, %%clock64;" : "=l"(start)::"memory");
   //#pragma unroll
   for (int j = 0; j < ITERS; ++j) {
+    // asm 是汇编关键字
+    // volatile 用于确保该指令不会因编译器的优化而省略，且要求每次直接读值 
     asm volatile(
         "mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 "
         "{%0,%1}, {%2}, {%3}, {%4,%5};\n"
@@ -227,6 +229,7 @@ float run(int THREADS_PER_BLOCK, bool report_fma_bw = false) {
     gpuErrchk(cudaMemcpy(data2_g, data2, total_B_SIZE * sizeof(T),
                          cudaMemcpyHostToDevice));
   
+    // 核函数名<<< 线程块数，线程/线程块数 >>>(函数参数)
     mma_ubench<<<BLOCKS_NUM, THREADS_PER_BLOCK>>>(
         startClk_g, stopClk_g, data1_g, data2_g, res_g, 0);
     gpuErrchk(cudaPeekAtLastError());
@@ -269,7 +272,7 @@ float run(int THREADS_PER_BLOCK, bool report_fma_bw = false) {
 int main() {
     intilizeDeviceProp(0);
     // std::cout << "mma1688 FP16 operand, FP32 accumalte:\n";
-    std::cout<<"***********************************"<<std::endl;
+    std::cout <<"***********************************" << std::endl;
     std::cout << "mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 microbenchmark with ILP = " << ILPconfig << std::endl;
     for(int i = 1; i <= 32; i = i*2){
         std::cout << "Number of warps = "<< i <<std::endl;
