@@ -73,7 +73,7 @@ __global__ void tensr1688_flops(uint64_t *startClk, uint64_t *stopClk, half *a, 
   //#pragma unroll
   for (int j = 0; j < ITERS; ++j) {
     asm volatile(
-        "wmma.mma.sync.aligned.m16n16k16.row.col.f32.f16.f16.f32 "
+        "wmma.mma.sync.aligned.m16n16k16.row.row.f32.f16.f16.f32 "
         "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%7,%8,%9,%10};\n"
         : "=f"(D[0]), "=f"(D[1]), "=f"(D[2]), "=f"(D[3])
         : "r"(A[0]), "r"(A[1]), 
@@ -82,7 +82,7 @@ __global__ void tensr1688_flops(uint64_t *startClk, uint64_t *stopClk, half *a, 
     ); 
     #if (ILPconfig >= 2) 
     asm volatile(
-      "wmma.mma.sync.aligned.m16n16k16.row.col.f32.f16.f16.f32 "
+      "wmma.mma.sync.aligned.m16n16k16.row.row.f32.f16.f16.f32 "
       "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%7,%8,%9,%10};\n"
       : "=f"(D[4]), "=f"(D[5]), "=f"(D[6]), "=f"(D[7])
       : "r"(A[2]), "r"(A[3]), 
@@ -92,7 +92,7 @@ __global__ void tensr1688_flops(uint64_t *startClk, uint64_t *stopClk, half *a, 
     #endif
     #if (ILPconfig >= 3)
     asm volatile(
-      "wmma.mma.sync.aligned.m16n16k16.row.col.f32.f16.f16.f32 "
+      "wmma.mma.sync.aligned.m16n16k16.row.row.f32.f16.f16.f32 "
       "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%7,%8,%9,%10};\n"
       : "=f"(D[8]), "=f"(D[9]), "=f"(D[10]), "=f"(D[11])
       : "r"(A[4]), "r"(A[5]), 
@@ -103,7 +103,7 @@ __global__ void tensr1688_flops(uint64_t *startClk, uint64_t *stopClk, half *a, 
 
     #if (ILPconfig >= 4)
     asm volatile(
-        "wmma.mma.sync.aligned.m16n16k16.row.col.f32.f16.f16.f32 "
+        "wmma.mma.sync.aligned.m16n16k16.row.row.f32.f16.f16.f32 "
         "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%7,%8,%9,%10};\n"
         : "=f"(D[12]), "=f"(D[13]), "=f"(D[14]), "=f"(D[15])
         : "r"(A[6]), "r"(A[7]), 

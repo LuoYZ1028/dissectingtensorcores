@@ -73,7 +73,7 @@ __global__ void tensr1688_flops(uint64_t *startClk, uint64_t *stopClk, half *a, 
   //#pragma unroll
   for (int j = 0; j < ITERS; ++j) {
     asm volatile(
-        "wmma.mma.sync.aligned.m32n8k16.row.col.f32.f16.f16.f32 "
+        "wmma.mma.sync.aligned.m32n8k16.row.row.f32.f16.f16.f32 "
         "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%7,%8,%9,%10};\n"
         : "=f"(D[0]), "=f"(D[1]), "=f"(D[2]), "=f"(D[3])
         : "r"(A[0]), "r"(A[1]), 
