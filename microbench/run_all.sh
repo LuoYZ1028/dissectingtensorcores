@@ -7,6 +7,7 @@
 THIS_DIR="$( cd "$( dirname "$BASH_SOURCE" )" && pwd )"
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 
+rm *.log
 for ((i=1; i<=8; ++i)); do 
     cd ${SCRIPT_DIR}
     make clean

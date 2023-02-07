@@ -22,12 +22,12 @@
 #endif
 
 using namespace nvcuda;
-#define M 32
-#define N 8
+#define M 16
+#define N 16
 #define K 16
 
 template <class T, class R>
-__global__ void tensor32816_flops(uint64_t *startClk, uint64_t *stopClk, 
+__global__ void tensor161616_flops(uint64_t *startClk, uint64_t *stopClk, 
 	  half *mat_a, half *mat_b, float *res, uint32_t stride) {
   	// thread index
 	uint32_t tid = threadIdx.x;
@@ -144,7 +144,7 @@ __global__ void tensor32816_flops(uint64_t *startClk, uint64_t *stopClk,
 
 
 template <class T, class R> 
-float tensor32816_max_flops(int THREADS_PER_BLOCK, bool report_fma_bw = false) {
+float tensor161616_max_flops(int THREADS_PER_BLOCK, bool report_fma_bw = false) {
 	intilizeDeviceProp(0);
 	int BLOCKS_NUM = 1;
 	int TOTAL_THREADS = THREADS_PER_BLOCK * BLOCKS_NUM;
@@ -183,7 +183,7 @@ float tensor32816_max_flops(int THREADS_PER_BLOCK, bool report_fma_bw = false) {
 	gpuErrchk(cudaMemcpy(data_b_ptr, data_b, 
 		total_B_SIZE * sizeof(T), cudaMemcpyHostToDevice));
 	// 给 mma 操作计时
-	tensor32816_flops<T, R><<<BLOCKS_NUM, THREADS_PER_BLOCK>>>(
+	tensor161616_flops<T, R><<<BLOCKS_NUM, THREADS_PER_BLOCK>>>(
 		startClk_ptr, stopClk_ptr, data_a_ptr, data_b_ptr, res_ptr, 0);
 	gpuErrchk(cudaPeekAtLastError());
 	// 没有发生错误才将 时间数据 和 乘法结果 放入 GPU 内部
@@ -207,7 +207,7 @@ float tensor32816_max_flops(int THREADS_PER_BLOCK, bool report_fma_bw = false) {
 	mma_bw = ((float)(ITERS * TOTAL_THREADS)) / (float)total_time;
 	fma_bw = ((float)(ITERS * M * N * K * ILPconfig * (TOTAL_THREADS / WARP_SIZE))) 
 		/ (float)total_time;
-	
+  
 	std::cout << "wmma-m" << M << "n" << N << "k" << K << \
 		".row.row.fp16  latency " << (float)total_time/(float)ITERS << " cycles\n";
 	std::cout << "FMA tensor bandwidth = " << fma_bw + fpuFMA << "(FMA/clk/SM)\n";
@@ -228,7 +228,7 @@ int main() {
 
 	for (auto& e:warps) {
 		std::cout << "Number of warps = " << e << std::endl;
-		tensor32816_max_flops<__half, float>(32 * e); // 每个 warp 有32个线程
+		tensor161616_max_flops<__half, float>(32 * e); // 每个 warp 有32个线程
 		std::cout << std::endl;
 	}
 	return 0;

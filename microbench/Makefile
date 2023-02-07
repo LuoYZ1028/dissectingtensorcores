@@ -6,7 +6,6 @@ BIN_DIR := $(BASE_DIR)/bin
 # SUB_DIRS      = $(wildcard ubench/ldmatrix/*/)
 # SUB_DIRS      = $(wildcard ubench/mma/*/)
 # SUB_DIRS		= $(wildcard ubench/wmma_load/*/)
-# SUB_DIRS		= $(wildcard ubench/mmasp/*/)
 SUB_DIRS		= $(wildcard ubench/wmma/*/)
 
 # 此处:%=做了一个添加前缀的操作
@@ -30,7 +29,7 @@ create_dir:
 	mkdir -p $(BIN_DIR)	
 
 delete_dir:
-	cd $(BIN_DIR); rm -f *.app
+	cd $(BIN_DIR); rm -f *.app;
 
 
 	
