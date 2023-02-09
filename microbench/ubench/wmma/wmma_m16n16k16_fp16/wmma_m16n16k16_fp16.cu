@@ -25,6 +25,8 @@ using namespace nvcuda;
 #define M 16
 #define N 16
 #define K 16
+#define BLOCKS_NUM 1
+#define WARP_SIZE 32
 
 template <class T, class R>
 __global__ void tensor161616_flops(uint64_t *startClk, uint64_t *stopClk, 
@@ -74,22 +76,20 @@ __global__ void tensor161616_flops(uint64_t *startClk, uint64_t *stopClk,
 
 
 template <class T, class R> 
-float tensor161616_max_flops(int THREADS_PER_BLOCK, bool report_fma_bw = false) {
+float tensor161616_max_flops(int threads_per_blk, bool report_fma_bw = false) {
 	intilizeDeviceProp(0);
-	int BLOCKS_NUM = 1;
-	int TOTAL_THREADS = THREADS_PER_BLOCK * BLOCKS_NUM;
-	int WARP_SIZE = 32;
-  
+	int total_threads = threads_per_blk * BLOCKS_NUM;
+	int warp_num = total_threads / WARP_SIZE;
 	// 根据假设，A 和 B 矩阵的大小都为16*16
-	unsigned total_A_SIZE = M * K * (TOTAL_THREADS / WARP_SIZE) * ILPconfig;
-	unsigned total_B_SIZE = K * N * (TOTAL_THREADS / WARP_SIZE) * ILPconfig;
-	unsigned total_R_SIZE = M * N * (TOTAL_THREADS / WARP_SIZE) * ILPconfig;
-  
-	uint64_t *startClk = (uint64_t *)malloc(TOTAL_THREADS * sizeof(uint64_t));
-	uint64_t *stopClk = (uint64_t *)malloc(TOTAL_THREADS * sizeof(uint64_t));
-	T *data_a = (T *)malloc(total_A_SIZE * sizeof(T));
-	T *data_b = (T *)malloc(total_B_SIZE * sizeof(T));
-	R *res = (R *)malloc(total_R_SIZE * sizeof(R));
+	unsigned A_GLOBAL = M * K * warp_num * ILPconfig;
+	unsigned B_GLOBAL = K * N * warp_num * ILPconfig;
+	unsigned D_GLOBAL = M * N * warp_num * ILPconfig;
+
+	uint64_t *startClk = (uint64_t *)malloc(total_threads * sizeof(uint64_t));
+	uint64_t *stopClk = (uint64_t *)malloc(total_threads * sizeof(uint64_t));
+	T *data_a = (T *)malloc(A_GLOBAL * sizeof(T));
+	T *data_b = (T *)malloc(B_GLOBAL * sizeof(T));
+	R *res = (R *)malloc(D_GLOBAL * sizeof(R));
   
 	uint64_t *startClk_ptr;
 	uint64_t *stopClk_ptr;
@@ -102,40 +102,40 @@ float tensor161616_max_flops(int THREADS_PER_BLOCK, bool report_fma_bw = false) 
 	for (uint32_t i = 0; i < K * N; i++) { data_b[i] = (T)i; }
 	
 	// 使用 cudaMalloc 在 GPU 内分配空间，地址赋予 ptr
-	gpuErrchk(cudaMalloc(&startClk_ptr, TOTAL_THREADS * sizeof(uint64_t)));
-	gpuErrchk(cudaMalloc(&stopClk_ptr, TOTAL_THREADS * sizeof(uint64_t)));
-	gpuErrchk(cudaMalloc(&data_a_ptr, total_A_SIZE * sizeof(T)));
-	gpuErrchk(cudaMalloc(&data_b_ptr, total_B_SIZE * sizeof(T)));
-	gpuErrchk(cudaMalloc(&res_ptr, total_R_SIZE * sizeof(R)));
+	gpuErrchk(cudaMalloc(&startClk_ptr, total_threads * sizeof(uint64_t)));
+	gpuErrchk(cudaMalloc(&stopClk_ptr, total_threads * sizeof(uint64_t)));
+	gpuErrchk(cudaMalloc(&data_a_ptr, A_GLOBAL * sizeof(T)));
+	gpuErrchk(cudaMalloc(&data_b_ptr, B_GLOBAL * sizeof(T)));
+	gpuErrchk(cudaMalloc(&res_ptr, D_GLOBAL * sizeof(R)));
 	// 将数据搬到上述 GPU 分配的空间
 	gpuErrchk(cudaMemcpy(data_a_ptr, data_a, 
-		total_A_SIZE * sizeof(T), cudaMemcpyHostToDevice));
+		A_GLOBAL * sizeof(T), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMemcpy(data_b_ptr, data_b, 
-		total_B_SIZE * sizeof(T), cudaMemcpyHostToDevice));
+		B_GLOBAL * sizeof(T), cudaMemcpyHostToDevice));
 	// 给 mma 操作计时
-	tensor161616_flops<T, R><<<BLOCKS_NUM, THREADS_PER_BLOCK>>>(
+	tensor161616_flops<T, R><<<BLOCKS_NUM, threads_per_blk>>>(
 		startClk_ptr, stopClk_ptr, data_a_ptr, data_b_ptr, res_ptr, 0);
 	gpuErrchk(cudaPeekAtLastError());
 	// 没有发生错误才将 时间数据 和 乘法结果 放入 GPU 内部
 	gpuErrchk(cudaMemcpy(startClk, startClk_ptr, 
-		TOTAL_THREADS * sizeof(uint64_t), cudaMemcpyDeviceToHost));
+		total_threads * sizeof(uint64_t), cudaMemcpyDeviceToHost));
 	gpuErrchk(cudaMemcpy(stopClk, stopClk_ptr, 
-		TOTAL_THREADS * sizeof(uint64_t), cudaMemcpyDeviceToHost));
+		total_threads * sizeof(uint64_t), cudaMemcpyDeviceToHost));
 	gpuErrchk(cudaMemcpy(res, res_ptr, 
-		total_R_SIZE * sizeof(R), cudaMemcpyDeviceToHost));
+		D_GLOBAL * sizeof(R), cudaMemcpyDeviceToHost));
   
 	float mma_bw, fma_bw;
 	// 总耗时 = 最晚结束时间 - 最早开始时间
 	uint64_t total_time =
-		*std::max_element(&stopClk[0], &stopClk[TOTAL_THREADS]) -
-		*std::min_element(&startClk[0], &startClk[TOTAL_THREADS]);
+		*std::max_element(&stopClk[0], &stopClk[total_threads]) -
+		*std::min_element(&startClk[0], &startClk[total_threads]);
 
 	// ? 不清楚此处是什么意思
-	float fpuFMA = (float)(ITERS * TOTAL_THREADS * 1 * 1 * 1 * 0 ) /
+	float fpuFMA = (float)(ITERS * total_threads * 1 * 1 * 1 * 0 ) /
 		  ((float)total_time);  // max 64FMA/clk/SM on RTX3070Ti
 
-	mma_bw = ((float)(ITERS * TOTAL_THREADS)) / (float)total_time;
-	fma_bw = ((float)(ITERS * M * N * K * ILPconfig * (TOTAL_THREADS / WARP_SIZE))) 
+	mma_bw = ((float)(ITERS * total_threads)) / (float)total_time;
+	fma_bw = ((float)(ITERS * M * N * K * ILPconfig * warp_num)) 
 		/ (float)total_time;
   
 	std::cout << "wmma-m" << M << "n" << N << "k" << K << \
@@ -158,7 +158,7 @@ int main() {
 
 	for (auto& e:warps) {
 		std::cout << "Number of warps = " << e << std::endl;
-		tensor161616_max_flops<__half, float>(32 * e); // 每个 warp 有32个线程
+		tensor161616_max_flops<__half, float>(WARP_SIZE * e);
 		std::cout << std::endl;
 	}
 	return 0;
