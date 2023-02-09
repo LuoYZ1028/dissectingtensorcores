@@ -6,7 +6,8 @@ BIN_DIR := $(BASE_DIR)/bin
 # SUB_DIRS      = $(wildcard ubench/ldmatrix/*/)
 # SUB_DIRS      = $(wildcard ubench/mma/*/)
 # SUB_DIRS		= $(wildcard ubench/wmma_load/*/)
-SUB_DIRS		= $(wildcard ubench/wmma/*/)
+# SUB_DIRS		= $(wildcard ubench/wmma/*/)
+SUB_DIRS 		= $(wildcard ubench/wmma/wmma_m16n16k16_fp16/)
 
 # 此处:%=做了一个添加前缀的操作
 SUB_DIRS_ALL    = $(SUB_DIRS:%=all-%)
