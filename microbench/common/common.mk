@@ -21,7 +21,7 @@ ITERS ?= 999
 MEAN ?= 0.0
 STDDEV ?= 1.0
 release:
-	$(CC) $(NVCC_FLGAS) --define-macro ILPconfig=$(ILP),ITERS=$(ITERS),MEAN=$(MEAN),STDDEV=$(STDDEV) $(CUOPTS) $(SRC) -o $(EXE) -I $(INCLUDE) -L $(LIB) -lcudart
+	$(CC) $(NVCC_FLGAS) -arch=sm_${TargetSM} --define-macro ILPconfig=$(ILP),ITERS=$(ITERS),MEAN=$(MEAN),STDDEV=$(STDDEV) $(CUOPTS) $(SRC) -o $(EXE) -I $(INCLUDE) -L $(LIB) -lcudart
 	cp $(EXE) $(BIN_DIR)
 
 # clean:
