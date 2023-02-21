@@ -31,29 +31,28 @@ using namespace nvcuda;
 #define A_LAYOUT wmma::row_major
 #define B_LAYOUT wmma::col_major
 #define D_LAYOUT wmma::mem_row_major
-// #define MAX_ACC 16
+#define N_GLOBAL N
+#define K_GLOBAL K
+#define factor ((N_GLOBAL / N) * (K_GLOBAL / K))
+#define a_num (ILPconfig * factor)
+#define b_num (ILPconfig * factor)
 
 template <class T, class R>
 __global__ void tensor161616_flops(uint64_t *startClk, uint64_t *stopClk, 
-	  T *mat_a, T *mat_b, R *res, int M_GLOBAL, int N_GLOBAL, int K_GLOBAL, int warp_num) {
+	  T *mat_a, T *mat_b, R *res, int M_GLOBAL) {
 	int warpId = (blockIdx.x * blockDim.x + threadIdx.x) / WARP_SIZE;
-
+	// int factor = (N_GLOBAL / N) * (K_GLOBAL / K);
+	// int a_frag_num = ILPconfig * factor;
+	// int b_frag_num = a_frag_num;
 	// declare fragments
-	wmma::fragment<wmma::matrix_a, M, N, K, T, A_LAYOUT> a_frag;
-	wmma::fragment<wmma::matrix_b, M, N, K, T, B_LAYOUT> b_frag;
-	// wmma::fragment<wmma::accumulator, M, N, K, R> acc_frag[MAX_ACC];
-	// for (int i = 0; i < MAX_ACC; i++)
-	// 	wmma::fill_fragment(acc_frag[i], 0.0f);
-	wmma::fragment<wmma::accumulator, M, N, K, R> acc_frag;
-	wmma::fill_fragment(acc_frag, 0.0f);
-	
+	wmma::fragment<wmma::matrix_a, M, N, K, T, A_LAYOUT> a_frag[a_num];
+	wmma::fragment<wmma::matrix_b, M, N, K, T, B_LAYOUT> b_frag[b_num];
+	wmma::fragment<wmma::accumulator, M, N, K, R> acc_frag[ILPconfig];
+	for (int i = 0; i < ILPconfig; i++)
+		wmma::fill_fragment(acc_frag[i], 0.0f);
+	// wmma::fragment<wmma::accumulator, M, N, K, R> acc_frag;
+	// wmma::fill_fragment(acc_frag, 0.0f);
 
-	uint64_t start = 0;
-	uint64_t stop = 0;
-
-	asm volatile("bar.sync 0;");
-	asm volatile("mov.u64 %0, %%clock64;" : "=l"(start)::"memory");
-	// for (int ite = 0; ite < ITERS; ite++) {
 	int a_row = warpId * M;
 	// loop over n & k
 	for (int n = 0; n < N_GLOBAL; n += N) {
@@ -63,28 +62,92 @@ __global__ void tensor161616_flops(uint64_t *startClk, uint64_t *stopClk,
 			int b_row = k;
 			// load input then perform MMA 
 			if (a_row < M_GLOBAL && a_col < K_GLOBAL && b_row < K_GLOBAL && b_col < N_GLOBAL) {
-				wmma::load_matrix_sync(a_frag, mat_a + a_row * K_GLOBAL + a_col, K_GLOBAL);
-				wmma::load_matrix_sync(b_frag, mat_b + b_col * K_GLOBAL + b_row, K_GLOBAL);
-				wmma::mma_sync(acc_frag, a_frag, b_frag, acc_frag);
+				wmma::load_matrix_sync(a_frag[0 * factor + b_col * N + a_col], 
+									mat_a + a_row * K_GLOBAL + a_col, K_GLOBAL);
+				wmma::load_matrix_sync(b_frag[0 * factor + b_col * N + b_row], 
+									mat_b + b_col * K_GLOBAL + b_row, K_GLOBAL);
+				// wmma::mma_sync(acc_frag[0], a_frag[0], b_frag[0], acc_frag[0]);
+				#if ILPconfig >= 2
+				wmma::load_matrix_sync(a_frag[1 * factor + b_col * N + a_col], 
+									mat_a + a_row * K_GLOBAL + a_col, K_GLOBAL);
+				wmma::load_matrix_sync(b_frag[1 * factor + b_col * N + b_row], 
+									mat_b + b_col * K_GLOBAL + b_row, K_GLOBAL);
+				// wmma::mma_sync(acc_frag[1], a_frag[1], b_frag[1], acc_frag[1]);
+				#endif
+				#if ILPconfig >= 3
+				wmma::load_matrix_sync(a_frag[2 * factor + b_col * N + a_col], 
+									mat_a + a_row * K_GLOBAL + a_col, K_GLOBAL);
+				wmma::load_matrix_sync(b_frag[2 * factor + b_col * N + b_row],
+									mat_b + b_col * K_GLOBAL + b_row, K_GLOBAL);
+				// wmma::mma_sync(acc_frag[2], a_frag[2], b_frag[2], acc_frag[2]);
+				#endif
+				#if ILPconfig >= 4
+				wmma::load_matrix_sync(a_frag[3 * factor + b_col * N + a_col], 
+									mat_a + a_row * K_GLOBAL + a_col, K_GLOBAL);
+				wmma::load_matrix_sync(b_frag[3 * factor + b_col * N + b_row], 
+									mat_b + b_col * K_GLOBAL + b_row, K_GLOBAL);
+				// wmma::mma_sync(acc_frag[3], a_frag[3], b_frag[3], acc_frag[3]);
+				#endif
+				#if ILPconfig >= 5
+				wmma::load_matrix_sync(a_frag[4 * factor + b_col * N + a_col], 
+									mat_a + a_row * K_GLOBAL + a_col, K_GLOBAL);
+				wmma::load_matrix_sync(b_frag[4 * factor + b_col * N + b_row], 
+									mat_b + b_col * K_GLOBAL + b_row, K_GLOBAL);
+				// wmma::mma_sync(acc_frag[4], a_frag[4], b_frag[4], acc_frag[4]);
+				#endif
 			}
 		}
-		wmma::store_matrix_sync(res + a_row * N_GLOBAL + b_col, acc_frag, N_GLOBAL, D_LAYOUT);
+		// wmma::store_matrix_sync(res + a_row * N_GLOBAL + b_col, acc_frag[0], N_GLOBAL, D_LAYOUT);
 	}
-	// }
+	
+
+	uint64_t start = 0;
+	uint64_t stop = 0;
+
+	asm volatile("bar.sync 0;");
+	asm volatile("mov.u64 %0, %%clock64;" : "=l"(start)::"memory");
+
+	__syncwarp();
+	// loop over n & k
+	for (int n = 0; n < N_GLOBAL; n += N) {
+		int b_col = n;
+		for (int k = 0; k < K_GLOBAL; k += K) {
+			int a_col = k;
+			int b_row = k;
+			// load input then perform MMA 
+			if (a_row < M_GLOBAL && a_col < K_GLOBAL && b_row < K_GLOBAL && b_col < N_GLOBAL) {
+				wmma::mma_sync(acc_frag[0], a_frag[0 * factor + b_col * N + a_col], 
+							b_frag[0 * factor + b_col * N + b_row], acc_frag[0]);
+				#if ILPconfig >= 2
+				wmma::mma_sync(acc_frag[1], a_frag[1 * factor + b_col * N + a_col], 
+							b_frag[1 * factor + b_col * N + b_row], acc_frag[1]);
+				#endif
+				#if ILPconfig >= 3
+				wmma::mma_sync(acc_frag[2], a_frag[2 * factor + b_col * N + a_col], 
+							b_frag[2 * factor + b_col * N + b_row], acc_frag[2]);
+				#endif
+				#if ILPconfig >= 4
+				wmma::mma_sync(acc_frag[3], a_frag[3 * factor + b_col * N + a_col], 
+							b_frag[3 * factor + b_col * N + b_row], acc_frag[3]);
+				#endif
+				#if ILPconfig >= 5
+				wmma::mma_sync(acc_frag[4], a_frag[4 * factor + b_col * N + a_col],
+							b_frag[4 * factor + b_col * N + b_row], acc_frag[4]);
+				#endif
+			}
+		}
+	}
 	__syncwarp();
 	asm volatile("mov.u64 %0, %%clock64;" : "=l"(stop)::"memory");
-	
-	// int res_row = warpId * M;
-	// int res_col = warpId * N;
-	// if (res_row < M_GLOBAL && res_col < N_GLOBAL)
-	// 	wmma::store_matrix_sync(res + res_row * N_GLOBAL + res_col, acc_frag, N_GLOBAL, D_LAYOUT);
 
+	int res_col = 0;
+	wmma::store_matrix_sync(res + a_row * N_GLOBAL + res_col, acc_frag[0], N_GLOBAL, D_LAYOUT);
 	startClk[warpId] = start;
 	stopClk[warpId] = stop;
 }
 
 // template <class T, class R> 
-__host__ void mma_on_host(half *A, half *B, float *D, int M_GLOBAL, int N_GLOBAL, int K_GLOBAL) {
+__host__ void mma_on_host(half *A, half *B, float *D, int M_GLOBAL) {
 	for (int m = 0; m < M_GLOBAL; m++) {
 		for (int n = 0; n < N_GLOBAL; n++) {
 			float temp = 0.0f;
@@ -102,8 +165,8 @@ float tensor161616_max_flops(int warp_num, bool report_fma_bw = false) {
 	int total_threads = warp_num * WARP_SIZE;
 
 	uint32_t M_GLOBAL = M * warp_num;
-	uint32_t N_GLOBAL = N;
-	uint32_t K_GLOBAL = K;
+	// uint32_t N_GLOBAL = N;
+	// uint32_t K_GLOBAL = K;
 	uint32_t A_GLOBAL = M_GLOBAL * K_GLOBAL;
 	uint32_t B_GLOBAL = K_GLOBAL * N_GLOBAL;
 	uint32_t D_GLOBAL = M_GLOBAL * N_GLOBAL;
@@ -138,9 +201,9 @@ float tensor161616_max_flops(int warp_num, bool report_fma_bw = false) {
 		B_GLOBAL * sizeof(T), cudaMemcpyHostToDevice));
 	// 给 mma 操作计时
 	tensor161616_flops<T, R><<<BLOCKS_NUM, WARP_SIZE * warp_num>>>(
-		startClk_ptr, stopClk_ptr, data_a_ptr, data_b_ptr, cuda_res_ptr,
-		M_GLOBAL, N_GLOBAL, K_GLOBAL, warp_num);
-	mma_on_host(data_a, data_b, cpu_res, M_GLOBAL, N_GLOBAL, K_GLOBAL);
+		startClk_ptr, stopClk_ptr, data_a_ptr, data_b_ptr, cuda_res_ptr, 
+		M_GLOBAL);
+	mma_on_host(data_a, data_b, cpu_res, M_GLOBAL);
 	gpuErrchk(cudaPeekAtLastError());
 	// 没有发生错误才将 时间数据 和 乘法结果 放入 GPU 内部
 	gpuErrchk(cudaMemcpy(startClk, startClk_ptr, 
